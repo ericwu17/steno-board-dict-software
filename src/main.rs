@@ -1,13 +1,50 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     fmt::{Debug, Display},
+    fs::File,
+    hash::Hash,
+    io::Read,
 };
 
 fn main() {
-    println!("Hello, world from main!");
+    load_dictionary("example.json");
 }
 
-#[derive(Copy, Clone)]
+pub fn load_dictionary(path: &str) {
+    let mut file_contents = String::new();
+    let mut f = File::open(path).unwrap();
+    f.read_to_string(&mut file_contents).unwrap();
+
+    let data: HashMap<String, String> = serde_json::from_str(&file_contents).unwrap();
+    let t: HashMap<Vec<Stroke>, String> = data
+        .into_iter()
+        .filter_map(|(k, v)| {
+            let k = convert_str_to_stroke_vec(&k);
+            match k {
+                Some(k) => Some((k, v)),
+                None => None,
+            }
+        })
+        .collect();
+
+    println!("done");
+    println!("{}", t.len());
+}
+
+pub fn convert_str_to_stroke_vec(s: &str) -> Option<Vec<Stroke>> {
+    let mut res = Vec::new();
+    for frag in s.split("/") {
+        if let Some(s) = Stroke::try_stroke_str_to_int(frag) {
+            res.push(Stroke::from(s))
+        } else {
+            return None;
+        }
+    }
+
+    Some(res)
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Stroke(u32);
 
 impl Stroke {
@@ -20,8 +57,10 @@ impl Stroke {
     pub fn to_int(&self) -> u32 {
         self.0
     }
-
-    pub fn stroke_str_to_int(s: &str) -> u32 {
+    pub fn try_stroke_str_to_int(s: &str) -> Option<u32> {
+        if s.is_empty() {
+            return None;
+        }
         let mut stroke_chars: VecDeque<char> = s.chars().collect();
         let steno_stroke_order = "#ZSTKPWHRAO*EUFRPBLGTSDZ";
         let steno_stroke_order_chars: Vec<char> = steno_stroke_order.chars().collect();
@@ -42,13 +81,27 @@ impl Stroke {
                     current_pos += 1
                 }
                 if current_pos == n {
-                    panic!("ran off the end when parsing stroke string {}", s);
+                    // ran off the end when parsing stroke string
+                    return None;
                 }
                 result |= 1 << current_pos;
             }
         }
 
-        result
+        Some(result)
+    }
+
+    pub fn stroke_str_to_int(s: &str) -> u32 {
+        Self::try_stroke_str_to_int(s).unwrap()
+    }
+
+    pub fn hash(&self) -> u32 {
+        // https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
+        let mut x = self.0;
+        x = ((x >> 16) ^ x) * 0x45d9f3bu32;
+        x = ((x >> 16) ^ x) * 0x45d9f3bu32;
+        x = (x >> 16) ^ x;
+        x
     }
 }
 
@@ -118,13 +171,16 @@ mod tests {
         assert_eq!(Stroke::stroke_str_to_int("-T"), 1 << 20);
 
         assert_eq!(Stroke::stroke_str_to_int("-Z"), 1 << 23);
-        
-        assert_eq!(Stroke::stroke_str_to_int("-PBT"), 1 << 16 | 1 << 17 | 1 << 20);
+
+        assert_eq!(
+            Stroke::stroke_str_to_int("-PBT"),
+            1 << 16 | 1 << 17 | 1 << 20
+        );
     }
 
     #[test]
     fn all_nums_to_stroke_and_back() {
-        for i in 1..(1<<24) {
+        for i in 1..(1 << 24) {
             let stroke = Stroke(i);
             let s = format!("{stroke}");
 
