@@ -4,7 +4,9 @@ use std::{
     hash::Hash,
 };
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+use serde::Serialize;
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Stroke(u32);
 
 impl Stroke {
@@ -112,6 +114,15 @@ impl Display for Stroke {
         }
 
         write!(f, "{}", res_string)
+    }
+}
+
+impl Serialize for Stroke {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{}", self))
     }
 }
 
