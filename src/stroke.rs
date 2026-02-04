@@ -78,6 +78,11 @@ impl Stroke {
 
         Some(res)
     }
+
+    pub fn to_bytes(&self) -> [u8; 3] {
+        let all_bytes = self.0.to_le_bytes();
+        [all_bytes[0], all_bytes[1], all_bytes[2]]
+    }
 }
 
 impl Debug for Stroke {

@@ -10,7 +10,7 @@ use crate::stroke::Stroke;
 
 #[derive(Debug, Serialize)]
 pub struct Dict {
-    entries: BTreeMap<Stroke, StrokeEntryList>,
+    pub entries: BTreeMap<Stroke, StrokeEntryList>,
 }
 
 /// StrokeEntryList represents a non-empty list of stroke entries.
@@ -22,8 +22,13 @@ pub struct StrokeEntryList {
 #[derive(Debug, Serialize)]
 pub struct StrokeEntry {
     prev_strokes: Vec<Stroke>,
-    string_output: String,
+    string_output: StrokeStringOutput,
     flags: EntryFlags,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StrokeStringOutput {
+    s: String
 }
 
 #[derive(Debug, Serialize)]
@@ -43,6 +48,30 @@ impl Dict {
             entries: BTreeMap::new(),
         }
     }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let entries = &self.entries;
+        let mut key_section = Vec::new();
+        let mut val_section = Vec::new();
+        let len_section = (entries.len() as u32).to_le_bytes();
+
+        for (k, v) in entries.iter() {
+            key_section.extend(k.to_bytes());
+            let offset = val_section.len() as u32;
+            key_section.extend(offset.to_le_bytes());
+
+            val_section.extend(v.to_bytes());
+        }
+
+        println!("Key section {} bytes and val section {} bytes", key_section.len(), val_section.len());
+
+        let mut res = Vec::new();
+        res.extend(len_section);
+        res.extend(key_section);
+        res.extend(val_section);
+        res
+    }
+
 }
 
 impl StrokeEntryList {
@@ -50,6 +79,48 @@ impl StrokeEntryList {
         Self {
             entries: Vec::new(),
         }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let len = self.entries.len();
+        assert!(len <= u16::MAX as usize);
+        let len = len as u16;
+        let mut res = Vec::new();
+
+        res.extend(len.to_le_bytes());
+        for e in self.entries.iter() {
+            res.extend(e.to_bytes())
+        }
+
+        res
+    }
+}
+
+impl StrokeEntry {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let prev_strokes_len = self.prev_strokes.len();
+        assert!(prev_strokes_len <= u8::MAX as usize);
+        let prev_strokes_len = prev_strokes_len as u8;
+        let mut res = vec![prev_strokes_len];
+
+        for s in self.prev_strokes.iter() {
+            res.extend(s.to_bytes());
+        }
+        res.push(self.flags.to_byte());
+        res.extend(self.string_output.to_bytes());
+        res
+    }
+}
+
+impl StrokeStringOutput {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res = Vec::new();
+        for c in self.s.chars() {
+            assert! (c.is_ascii());
+            res.push(c as u8)
+        }
+        res.push(0);
+        res
     }
 }
 
@@ -73,6 +144,9 @@ impl EntryFlags {
     }
     pub fn unset(&mut self, f: EntryFlag) {
         self.0 &= !f.to_bits();
+    }
+    pub fn to_byte(&self) -> u8 {
+        self.0
     }
 }
 
@@ -105,7 +179,7 @@ pub fn generate_dictionary(path: &str) -> Dict {
         
         let new_entry = StrokeEntry {
             prev_strokes: remaining_strokes,
-            string_output,
+            string_output : StrokeStringOutput { s: string_output },
             flags: EntryFlags::new(),
         };
 
