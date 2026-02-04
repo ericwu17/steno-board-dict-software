@@ -1,0 +1,19 @@
+the main thing will be a thing (maybe sorted array) that maps Stroke -> StrokeEntry
+
+StrokeEntry consists of
+    PrevStrokes (1 byte for len, followed by 3n bytes for previous strokes)
+    String output (a null-byte terminated C string)
+    Flags (1 byte)
+        IS_PREFIX
+        IS_SUFFIX
+        DO_CAPITALIZE
+        DO_NOT_CAPITALIZE
+
+When processing each stroke:
+    Special cases: "*", "-S", "-D", "-G"
+
+    find all matching stroke entries in the map,
+        filter the ones that have appropriate prev strokes, and pick the longest.
+    process the flag logic, output the string based on the queue of previously typed strokes.
+
+    log this stroke as the last typed stroke.
