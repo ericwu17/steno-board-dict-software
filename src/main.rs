@@ -51,7 +51,7 @@ impl Stroke {
     pub fn assert_is_valid(&self) {
         // The representation of a byte uses the lowest 3 bytes of the u32.
         let n = self.0;
-        assert!(n & 0xFF00_0000 == 0);
+        assert!(n & 0xFF80_0000 == 0);
     }
 
     pub fn to_int(&self) -> u32 {
@@ -62,7 +62,7 @@ impl Stroke {
             return None;
         }
         let mut stroke_chars: VecDeque<char> = s.chars().collect();
-        let steno_stroke_order = "#ZSTKPWHRAO*EUFRPBLGTSDZ";
+        let steno_stroke_order = "#STKPWHRAO*EUFRPBLGTSDZ";
         let steno_stroke_order_chars: Vec<char> = steno_stroke_order.chars().collect();
         let n = steno_stroke_order_chars.len();
 
@@ -121,7 +121,7 @@ impl Display for Stroke {
         // Or if the stroke contains any of the vowels or asterisk, there is no hyphen.
         let stroke = self.0;
 
-        let has_hyphen = if stroke & Stroke::stroke_str_to_int("ZSTKPWHR") == stroke {
+        let has_hyphen = if stroke & Stroke::stroke_str_to_int("STKPWHR") == stroke {
             false
         } else if stroke & Stroke::stroke_str_to_int("AO*EU") != 0 {
             false
@@ -131,9 +131,9 @@ impl Display for Stroke {
 
         let mut res_string = String::new();
 
-        let steno_stroke_order = "#ZSTKPWHRAO*EUFRPBLGTSDZ";
+        let steno_stroke_order = "#STKPWHRAO*EUFRPBLGTSDZ";
         let steno_stroke_order_chars: Vec<char> = steno_stroke_order.chars().collect();
-        for i in 0..=23 {
+        for i in 0..steno_stroke_order_chars.len() {
             if stroke & (1 << i) != 0 {
                 res_string.push(steno_stroke_order_chars[i]);
             }
@@ -164,23 +164,22 @@ mod tests {
 
     #[test]
     fn stroke_parsing_test() {
-        assert_eq!(Stroke::stroke_str_to_int("Z"), 2);
-        assert_eq!(Stroke::stroke_str_to_int("S"), 4);
+        assert_eq!(Stroke::stroke_str_to_int("S"), 2);
         assert_eq!(Stroke::stroke_str_to_int("#"), 1);
-        assert_eq!(Stroke::stroke_str_to_int("T"), 8);
-        assert_eq!(Stroke::stroke_str_to_int("-T"), 1 << 20);
+        assert_eq!(Stroke::stroke_str_to_int("T"), 4);
+        assert_eq!(Stroke::stroke_str_to_int("-T"), 1 << 19);
 
-        assert_eq!(Stroke::stroke_str_to_int("-Z"), 1 << 23);
+        assert_eq!(Stroke::stroke_str_to_int("-Z"), 1 << 22);
 
         assert_eq!(
             Stroke::stroke_str_to_int("-PBT"),
-            1 << 16 | 1 << 17 | 1 << 20
+            1 << 15 | 1 << 16 | 1 << 19
         );
     }
 
     #[test]
     fn all_nums_to_stroke_and_back() {
-        for i in 1..(1 << 24) {
+        for i in 1..(1 << 23) {
             let stroke = Stroke(i);
             let s = format!("{stroke}");
 
