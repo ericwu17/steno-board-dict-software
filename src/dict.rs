@@ -6,7 +6,7 @@ use std::{
 
 use serde::Serialize;
 
-use crate::stroke::Stroke;
+use crate::{string_section_builder::StringSectionBuilder, stroke::Stroke};
 
 #[derive(Debug, Serialize)]
 pub struct Dict {
@@ -28,7 +28,7 @@ pub struct StrokeEntry {
 
 #[derive(Debug, Serialize)]
 pub struct StrokeStringOutput {
-    s: String
+    s: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,29 +49,36 @@ impl Dict {
         }
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_sections(&self) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
         let entries = &self.entries;
         let mut key_section = Vec::new();
         let mut val_section = Vec::new();
-        let len_section = (entries.len() as u32).to_le_bytes();
+
+        let mut string_section_builder = StringSectionBuilder::new();
+        for v in entries.values() {
+            for e in &v.entries {
+                string_section_builder.add_string(&e.string_output.s);
+            }
+        }
+        let (string_section, dict) = string_section_builder.layout_strings();
 
         for (k, v) in entries.iter() {
             key_section.extend(k.to_bytes());
             let offset = val_section.len() as u32;
             key_section.extend(offset.to_le_bytes());
 
-            val_section.extend(v.to_bytes());
+            val_section.extend(v.to_bytes(&dict));
         }
 
-        println!("Key section {} bytes and val section {} bytes", key_section.len(), val_section.len());
+        println!(
+            "Key section {} val section {} string section {}",
+            key_section.len(),
+            val_section.len(),
+            string_section.len(),
+        );
 
-        let mut res = Vec::new();
-        res.extend(len_section);
-        res.extend(key_section);
-        res.extend(val_section);
-        res
+        (key_section, val_section, string_section)
     }
-
 }
 
 impl StrokeEntryList {
@@ -81,7 +88,7 @@ impl StrokeEntryList {
         }
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self, dict: &HashMap<String, usize>) -> Vec<u8> {
         let len = self.entries.len();
         assert!(len <= u16::MAX as usize);
         let len = len as u16;
@@ -89,7 +96,7 @@ impl StrokeEntryList {
 
         res.extend(len.to_le_bytes());
         for e in self.entries.iter() {
-            res.extend(e.to_bytes())
+            res.extend(e.to_bytes(dict))
         }
 
         res
@@ -97,7 +104,7 @@ impl StrokeEntryList {
 }
 
 impl StrokeEntry {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self, dict: &HashMap<String, usize>) -> Vec<u8> {
         let prev_strokes_len = self.prev_strokes.len();
         assert!(prev_strokes_len <= u8::MAX as usize);
         let prev_strokes_len = prev_strokes_len as u8;
@@ -107,7 +114,8 @@ impl StrokeEntry {
             res.extend(s.to_bytes());
         }
         res.push(self.flags.to_byte());
-        res.extend(self.string_output.to_bytes());
+        let ptr_bytes = dict.get(&self.string_output.s).unwrap().to_le_bytes();
+        res.extend([ptr_bytes[0], ptr_bytes[1], ptr_bytes[2]]);
         res
     }
 }
@@ -116,7 +124,7 @@ impl StrokeStringOutput {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut res = Vec::new();
         for c in self.s.chars() {
-            assert! (c.is_ascii());
+            assert!(c.is_ascii());
             res.push(c as u8)
         }
         res.push(0);
@@ -176,19 +184,17 @@ pub fn generate_dictionary(path: &str) -> Dict {
         if !is_good_string(&string_output) {
             continue;
         }
-        
+
         let new_entry = StrokeEntry {
             prev_strokes: remaining_strokes,
-            string_output : StrokeStringOutput { s: string_output },
+            string_output: StrokeStringOutput { s: string_output },
             flags: EntryFlags::new(),
         };
 
         let e = res.entry(final_stroke).or_insert(StrokeEntryList::empty());
         e.entries.push(new_entry);
     }
-    Dict {
-        entries: res
-    }
+    Dict { entries: res }
 }
 
 pub fn is_good_string(s: &str) -> bool {
